@@ -81,6 +81,11 @@ export default function App() {
     }
   };
 
+  const clearPin = () => {
+    setPinInput("");
+    setLoginError(false);
+  };
+
   const verifyPin = (inputToVerify) => {
     if (inputToVerify === ADMIN_PIN) {
       sessionStorage.setItem('control_authenticated', 'true');
