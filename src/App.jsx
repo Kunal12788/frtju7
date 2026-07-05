@@ -261,6 +261,52 @@ export default function App() {
     };
   }, [isAuthenticated]);
 
+  // Instant saving helpers for switches to prevent heartbeat race conditions
+  const toggleActiveState = async (val) => {
+    setIsActive(val);
+    if (!supabaseRef.current) return;
+    try {
+      await supabaseRef.current
+        .from('bullion_settings')
+        .update({ is_active: val, updated_at: new Date() })
+        .eq('id', 1);
+      showToast(val ? "Live streaming turned ON" : "Live streaming turned OFF");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update status", true);
+    }
+  };
+
+  const toggleGoldOverride = async (val) => {
+    setUseGoldOverride(val);
+    if (!supabaseRef.current) return;
+    try {
+      await supabaseRef.current
+        .from('bullion_settings')
+        .update({ use_gold_override: val, updated_at: new Date() })
+        .eq('id', 1);
+      showToast(val ? "Gold Override active" : "Gold Override disabled");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update override", true);
+    }
+  };
+
+  const toggleSilverOverride = async (val) => {
+    setUseSilverOverride(val);
+    if (!supabaseRef.current) return;
+    try {
+      await supabaseRef.current
+        .from('bullion_settings')
+        .update({ use_silver_override: val, updated_at: new Date() })
+        .eq('id', 1);
+      showToast(val ? "Silver Override active" : "Silver Override disabled");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update override", true);
+    }
+  };
+
   // Save changes to database
   const saveAllSettings = async () => {
     if (!supabaseRef.current) return;
@@ -371,7 +417,7 @@ export default function App() {
                   <input 
                     type="checkbox" 
                     checked={isActive} 
-                    onChange={(e) => setIsActive(e.target.checked)} 
+                    onChange={(e) => toggleActiveState(e.target.checked)} 
                   />
                   <span className="slider"></span>
                 </label>
@@ -415,7 +461,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={useGoldOverride} 
-                        onChange={(e) => setUseGoldOverride(e.target.checked)} 
+                        onChange={(e) => toggleGoldOverride(e.target.checked)} 
                       />
                       <span className="slider" style={{ borderRadius: '26px' }}></span>
                     </label>
@@ -471,7 +517,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={useSilverOverride} 
-                        onChange={(e) => setUseSilverOverride(e.target.checked)} 
+                        onChange={(e) => toggleSilverOverride(e.target.checked)} 
                       />
                       <span className="slider" style={{ borderRadius: '26px' }}></span>
                     </label>
