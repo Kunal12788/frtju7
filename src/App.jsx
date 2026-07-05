@@ -507,12 +507,12 @@ export default function App() {
               <div className="admin-card monitor-panel gold-border-highlight">
                 <div className="panel-header">
                   <h3 className="gold-text">👑 GOLD LIVE RATE STREAM</h3>
-                  <span className="live-status-dot green"></span>
+                  <span className={`live-status-dot ${isActive ? 'green' : 'red'}`}></span>
                 </div>
 
                 <div className="live-monitor-value">
-                  <span className="currency-symbol">₹</span>
-                  <span className="current-rate-val">{formatNumber(finalGoldDisplay)}</span>
+                  {isActive && <span className="currency-symbol">₹</span>}
+                  <span className="current-rate-val">{isActive ? formatNumber(finalGoldDisplay) : "CLOSED"}</span>
                 </div>
 
                 <div className="live-monitor">
@@ -563,12 +563,12 @@ export default function App() {
               <div className="admin-card monitor-panel silver-border-highlight">
                 <div className="panel-header">
                   <h3 className="silver-text">🥈 SILVER LIVE RATE STREAM</h3>
-                  <span className="live-status-dot green"></span>
+                  <span className={`live-status-dot ${isActive ? 'green' : 'red'}`}></span>
                 </div>
 
                 <div className="live-monitor-value">
-                  <span className="currency-symbol">₹</span>
-                  <span className="current-rate-val">{formatNumber(finalSilverDisplay)}</span>
+                  {isActive && <span className="currency-symbol">₹</span>}
+                  <span className="current-rate-val">{isActive ? formatNumber(finalSilverDisplay) : "CLOSED"}</span>
                 </div>
 
                 <div className="live-monitor">
