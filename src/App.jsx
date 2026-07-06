@@ -194,29 +194,35 @@ export default function App() {
 
     loadData();
 
-    // Setup Permanent Rates WebSocket
+    // Setup Permanent Rates WebSocket (Broadcast & Postgres Insert)
+    const handleNewRate = (row) => {
+      if (!row) return;
+      const currentSettings = configRef.current;
+      if (row.item === 'gold_995_100gms') {
+        setGoldHistory(prev => [row, ...prev.filter(r => r.id !== row.id).slice(0, 5)]);
+        const ocr = parseOcrPrice(row, currentSettings);
+        if (ocr !== null) setGoldOcr(ocr);
+      } else if (row.item === 'silver_999_1kg') {
+        setSilverHistory(prev => [row, ...prev.filter(r => r.id !== row.id).slice(0, 5)]);
+        const ocr = parseOcrPrice(row, currentSettings);
+        if (ocr !== null) setSilverOcr(ocr);
+      }
+    };
+
     const ratesChannel = supabase
-      .channel('monitor-rates-channel')
+      .channel('live-rates-topic')
+      .on('broadcast', { event: 'rate_update' }, (payload) => {
+        handleNewRate(payload.payload);
+      })
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'bullion_rates'
       }, (payload) => {
-        const row = payload.new;
-        const currentSettings = configRef.current;
-
-        // Push new rate to logs history lists
-        if (row.item === 'gold_995_100gms') {
-          setGoldHistory(prev => [row, ...prev.slice(0, 5)]);
-          const ocr = parseOcrPrice(row, currentSettings);
-          if (ocr !== null) setGoldOcr(ocr);
-        } else if (row.item === 'silver_999_1kg') {
-          setSilverHistory(prev => [row, ...prev.slice(0, 5)]);
-          const ocr = parseOcrPrice(row, currentSettings);
-          if (ocr !== null) setSilverOcr(ocr);
-        }
+        handleNewRate(payload.new);
       })
       .subscribe();
+
 
     // Setup Permanent Settings Sync WebSocket
     const settingsChannel = supabase
