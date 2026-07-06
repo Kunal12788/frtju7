@@ -228,6 +228,11 @@ export default function App() {
         filter: 'id=eq.1'
       }, (payload) => {
         const row = payload.new;
+        const prev = payload.old;
+        // Ignore heartbeat-only updates (where updated_at did not change)
+        if (prev && row.updated_at === prev.updated_at) {
+          return;
+        }
         setIsActive(row.is_active);
         setGoldAdjust(row.gold_adjustment);
         setUseGoldOverride(row.use_gold_override);
@@ -235,9 +240,9 @@ export default function App() {
         setSilverAdjust(row.silver_adjustment);
         setUseSilverOverride(row.use_silver_override);
         setOverrideSilver(row.override_silver);
-        showToast("Settings synchronized from database.");
       })
       .subscribe();
+
 
     // Standby Heartbeat Loop
     const sendHeartbeat = async () => {
