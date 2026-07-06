@@ -542,7 +542,9 @@ export default function App() {
                     <div className="mfa-instructions">
                       Open your Google Authenticator app, scan this QR code, and enter the verification code below.
                     </div>
-                    <div className="qr-code-svg" dangerouslySetInnerHTML={{ __html: mfaQrCode }} />
+                    <div className="qr-code-svg">
+                      <img src={mfaQrCode} alt="MFA QR Code" style={{ width: '100%', height: '100%', display: 'block', borderRadius: '8px' }} />
+                    </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1rem', fontFamily: 'monospace' }}>
                       Secret: {mfaSecret}
                     </div>
@@ -569,6 +571,14 @@ export default function App() {
                 </div>
                 <button type="submit" className="btn-primary" disabled={isAuthLoading}>
                   {isAuthLoading ? "Verifying..." : "Verify & Complete Login"}
+                </button>
+                <button 
+                  type="button" 
+                  className="logout-btn" 
+                  style={{ marginTop: '1rem', width: '100%', borderColor: 'transparent' }} 
+                  onClick={logout}
+                >
+                  Cancel & Sign Out
                 </button>
               </form>
             )}
