@@ -67,24 +67,15 @@ export default function App() {
   // Initialize Supabase Client once
   useEffect(() => {
     if (SUPABASE_URL && SUPABASE_WRITE_KEY) {
-      const client = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY);
-      supabaseRef.current = client;
-
-      // Check current session
-      client.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          // If session exists, fetch factors and check enrollment status
-          client.auth.mfa.listFactors().then(({ data: factors }) => {
-            const enrolled = factors?.all?.filter(f => f.status === 'verified') || [];
-            if (enrolled.length > 0) {
-              setIsAuthenticated(true);
-            } else {
-              // Not yet enrolled, trigger enrollment setup
-              checkMfa(session.user);
-            }
-          });
+      // Initialize Supabase with session persistence disabled (stores token in-memory only)
+      const client = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
         }
       });
+      supabaseRef.current = client;
     }
   }, []);
 
