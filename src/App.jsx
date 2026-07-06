@@ -121,7 +121,19 @@ export default function App() {
       const { data: factors, error: factorsErr } = await supabaseRef.current.auth.mfa.listFactors();
       if (factorsErr) throw factorsErr;
 
-      const enrolledFactors = factors?.all?.filter(f => f.status === 'verified') || [];
+      // Self-healing: Delete any stuck, unverified TOTP factors to prevent duplicate enrollment errors
+      const unverifiedFactors = factors?.all?.filter(f => f.status === 'unverified') || [];
+      for (const f of unverifiedFactors) {
+        try {
+          await supabaseRef.current.auth.mfa.unenroll({ factorId: f.id });
+        } catch (unenrollErr) {
+          console.warn("Failed to unenroll unverified factor:", unenrollErr);
+        }
+      }
+
+      // Re-fetch factors after clean-up
+      const { data: cleanFactors } = await supabaseRef.current.auth.mfa.listFactors();
+      const enrolledFactors = cleanFactors?.all?.filter(f => f.status === 'verified') || [];
 
       if (enrolledFactors.length > 0) {
         // Enrolled: Create authentication challenge
