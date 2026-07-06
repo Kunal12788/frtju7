@@ -11,11 +11,19 @@ const MAX_PIN_LENGTH = 4;
 
 export default function App() {
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => sessionStorage.getItem('control_authenticated') === 'true'
-  );
-  const [pinInput, setPinInput] = useState("");
-  const [loginError, setLoginError] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isMfaRequired, setIsMfaRequired] = useState(false);
+  const [mfaQrCode, setMfaQrCode] = useState(null);
+  const [mfaSecret, setMfaSecret] = useState("");
+  const [mfaFactorId, setMfaFactorId] = useState("");
+  const [mfaChallengeId, setMfaChallengeId] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  
   const lockScreenRef = useRef(null);
 
   // Settings Controls State (What the user configures in UI)
@@ -59,7 +67,24 @@ export default function App() {
   // Initialize Supabase Client once
   useEffect(() => {
     if (SUPABASE_URL && SUPABASE_WRITE_KEY) {
-      supabaseRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY);
+      const client = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY);
+      supabaseRef.current = client;
+
+      // Check current session
+      client.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          // If session exists, fetch factors and check enrollment status
+          client.auth.mfa.listFactors().then(({ data: factors }) => {
+            const enrolled = factors?.all?.filter(f => f.status === 'verified') || [];
+            if (enrolled.length > 0) {
+              setIsAuthenticated(true);
+            } else {
+              // Not yet enrolled, trigger enrollment setup
+              checkMfa(session.user);
+            }
+          });
+        }
+      });
     }
   }, []);
 
@@ -70,44 +95,124 @@ export default function App() {
     }, 2500);
   };
 
-  // PIN Keypad Handlers
-  const pressKey = (num) => {
-    if (pinInput.length < MAX_PIN_LENGTH) {
-      const newInput = pinInput + num;
-      setPinInput(newInput);
-      if (newInput.length === MAX_PIN_LENGTH) {
-        setTimeout(() => verifyPin(newInput), 150);
-      }
+  // Sign In with Email/Password
+  const handleSignIn = async (e) => {
+    if (e) e.preventDefault();
+    setAuthError("");
+    setIsAuthLoading(true);
+    try {
+      const { data, error } = await supabaseRef.current.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) throw error;
+      await checkMfa(data.user);
+    } catch (err) {
+      console.error(err);
+      setAuthError(err.message || "Invalid credentials");
+      setIsAuthLoading(false);
+      triggerShake();
     }
   };
 
-  const clearPin = () => {
-    setPinInput("");
-    setLoginError(false);
+  // Check MFA & Enroll or Challenge
+  const checkMfa = async (user) => {
+    try {
+      const { data: factors, error: factorsErr } = await supabaseRef.current.auth.mfa.listFactors();
+      if (factorsErr) throw factorsErr;
+
+      const enrolledFactors = factors?.all?.filter(f => f.status === 'verified') || [];
+
+      if (enrolledFactors.length > 0) {
+        // Enrolled: Create authentication challenge
+        const factor = enrolledFactors[0];
+        setMfaFactorId(factor.id);
+
+        const { data: challenge, error: challengeErr } = await supabaseRef.current.auth.mfa.challenge({
+          factorId: factor.id
+        });
+        if (challengeErr) throw challengeErr;
+
+        setMfaChallengeId(challenge.id);
+        setIsMfaRequired(true);
+        setIsAuthLoading(false);
+      } else {
+        // Not Enrolled: Start Google Authenticator setup enrollment
+        const { data: enrollData, error: enrollErr } = await supabaseRef.current.auth.mfa.enroll({
+          factorType: 'totp',
+          issuer: 'Vicky Jewellery Works',
+          friendlyName: 'Vicky Admin'
+        });
+        if (enrollErr) throw enrollErr;
+
+        setMfaFactorId(enrollData.id);
+        setMfaQrCode(enrollData.totp.qr_code);
+        setMfaSecret(enrollData.totp.secret);
+
+        // Challenge for the initial enrollment verification
+        const { data: challenge, error: challengeErr } = await supabaseRef.current.auth.mfa.challenge({
+          factorId: enrollData.id
+        });
+        if (challengeErr) throw challengeErr;
+
+        setMfaChallengeId(challenge.id);
+        setIsMfaRequired(true);
+        setIsAuthLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setAuthError("Failed to initiate authenticator verification: " + err.message);
+      setIsAuthLoading(false);
+    }
   };
 
-  const verifyPin = (inputToVerify) => {
-    if (inputToVerify === ADMIN_PIN) {
-      sessionStorage.setItem('control_authenticated', 'true');
+  // Verify code from Google Authenticator
+  const handleVerifyMfa = async (e) => {
+    if (e) e.preventDefault();
+    setAuthError("");
+    setIsAuthLoading(true);
+    try {
+      const { data, error } = await supabaseRef.current.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: mfaChallengeId,
+        code: mfaCode
+      });
+      if (error) throw error;
+
+      // Access granted!
       setIsAuthenticated(true);
-      setLoginError(false);
-    } else {
-      setLoginError(true);
-      if (lockScreenRef.current) {
-        lockScreenRef.current.style.animation = "shake 0.3s ease";
-        setTimeout(() => {
-          if (lockScreenRef.current) lockScreenRef.current.style.animation = "";
-        }, 300);
-      }
-      setPinInput("");
+      setIsMfaRequired(false);
+      showToast("Access Authorized!");
+    } catch (err) {
+      console.error(err);
+      setAuthError(err.message || "Invalid OTP Code. Please try again.");
+      triggerShake();
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
-  const logout = () => {
-    sessionStorage.removeItem('control_authenticated');
-    setIsAuthenticated(false);
-    setPinInput("");
+  const triggerShake = () => {
+    if (lockScreenRef.current) {
+      lockScreenRef.current.style.animation = "shake 0.3s ease";
+      setTimeout(() => {
+        if (lockScreenRef.current) lockScreenRef.current.style.animation = "";
+      }, 300);
+    }
   };
+
+  const logout = async () => {
+    if (supabaseRef.current) {
+      await supabaseRef.current.auth.signOut();
+    }
+    setIsAuthenticated(false);
+    setIsMfaRequired(false);
+    setMfaQrCode(null);
+    setMfaCode("");
+    setEmail("");
+    setPassword("");
+  };
+
 
   // Parse raw OCR rates from uploaded logs
   const parseOcrPrice = (row, activeSettings) => {
@@ -381,29 +486,82 @@ export default function App() {
       <main style={{ maxWidth: '1400px', width: '100%' }}>
         {!isAuthenticated ? (
           <div ref={lockScreenRef} className="admin-card pin-screen">
-            <h2 style={{ fontFamily: 'var(--font-title)', fontWeight: 600, textAlign: 'center', fontSize: '1.35rem' }}>
-              Enter Admin Passcode
+            <h2 style={{ fontFamily: 'var(--font-title)', fontWeight: 600, textAlign: 'center', fontSize: '1.35rem', marginBottom: '0.5rem' }}>
+              Vicky Jewellery Works
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', marginTop: '-0.5rem' }}>
-              Access restricted to authorized personnel
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', marginTop: '-0.5rem', marginBottom: '1.5rem' }}>
+              {isMfaRequired ? "Google Authenticator MFA Challenge" : "Sign In to Admin Command"}
             </p>
-            
-            <div className="pin-dots">
-              {[1, 2, 3, 4].map(idx => (
-                <div key={idx} className={`pin-dot ${idx <= pinInput.length ? 'filled' : ''}`} />
-              ))}
-            </div>
 
-            <div className="keypad">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                <button key={num} className="keypad-btn" onClick={() => pressKey(num)}>{num}</button>
-              ))}
-              <button className="keypad-btn" onClick={clearPin}>C</button>
-              <button className="keypad-btn" onClick={() => pressKey(0)}>0</button>
-              <button className="keypad-btn" style={{ fontSize: '0.95rem', fontWeight: 'bold' }} onClick={() => verifyPin(pinInput)}>OK</button>
-            </div>
-            
-            {loginError && <div className="error-message">Incorrect Passcode. Access Denied.</div>}
+            {/* Step A: Email/Password Form */}
+            {!isMfaRequired && (
+              <form className="login-form" onSubmit={handleSignIn}>
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input 
+                    type="email" 
+                    required 
+                    placeholder="admin@vickyjewellers.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Password</label>
+                  <input 
+                    type="password" 
+                    required 
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)} 
+                  />
+                </div>
+                <button type="submit" className="btn-primary" disabled={isAuthLoading}>
+                  {isAuthLoading ? "Authenticating..." : "Sign In"}
+                </button>
+              </form>
+            )}
+
+            {/* Step B: Google Authenticator Verification */}
+            {isMfaRequired && (
+              <form className="mfa-form" onSubmit={handleVerifyMfa}>
+                {mfaQrCode && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                    <div className="mfa-instructions">
+                      Open your Google Authenticator app, scan this QR code, and enter the verification code below.
+                    </div>
+                    <div className="qr-code-svg" dangerouslySetInnerHTML={{ __html: mfaQrCode }} />
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1rem', fontFamily: 'monospace' }}>
+                      Secret: {mfaSecret}
+                    </div>
+                  </div>
+                )}
+                
+                {!mfaQrCode && (
+                  <div className="mfa-instructions" style={{ textAlign: 'center' }}>
+                    Enter the 6-digit verification code from your Google Authenticator phone app.
+                  </div>
+                )}
+
+                <div className="form-group" style={{ textAlign: 'center' }}>
+                  <label style={{ display: 'block', textAlign: 'center' }}>Authenticator Code</label>
+                  <input 
+                    type="text" 
+                    required 
+                    maxLength={6}
+                    placeholder="000000"
+                    style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5em', fontWeight: 'bold' }}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))} 
+                  />
+                </div>
+                <button type="submit" className="btn-primary" disabled={isAuthLoading}>
+                  {isAuthLoading ? "Verifying..." : "Verify & Complete Login"}
+                </button>
+              </form>
+            )}
+
+            {authError && <div className="error-message" style={{ marginTop: '1rem' }}>{authError}</div>}
           </div>
         ) : (
           /* Grid Dashboard Layout containing separated panels */
