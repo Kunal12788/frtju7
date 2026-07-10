@@ -47,6 +47,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", isError: false });
   const supabaseRef = useRef(null);
+  const lastUpdatedAtRef = useRef(null);
 
   // Refs to hold configuration values so WebSocket doesn't need to reconnect on state changes
   const configRef = useRef({
@@ -258,6 +259,7 @@ export default function App() {
           .single();
 
         if (settings) {
+          lastUpdatedAtRef.current = settings.updated_at;
           setIsActive(settings.is_active);
           setGoldAdjust(parseFloat(settings.gold_adjustment) || 0);
           setUseGoldOverride(settings.use_gold_override);
@@ -344,11 +346,13 @@ export default function App() {
         filter: 'id=eq.1'
       }, (payload) => {
         const row = payload.new;
-        const prev = payload.old;
-        // Ignore heartbeat-only updates (where updated_at did not change)
-        if (prev && row.updated_at === prev.updated_at) {
+        
+        // Ignore updates if updated_at did not change (heartbeats)
+        if (lastUpdatedAtRef.current && row.updated_at === lastUpdatedAtRef.current) {
           return;
         }
+        
+        lastUpdatedAtRef.current = row.updated_at;
         setIsActive(row.is_active);
         setGoldAdjust(row.gold_adjustment);
         setUseGoldOverride(row.use_gold_override);
