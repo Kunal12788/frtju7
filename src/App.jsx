@@ -387,14 +387,19 @@ export default function App() {
     setIsActive(val);
     if (!supabaseRef.current) return;
     try {
-      await supabaseRef.current
+      const { error } = await supabaseRef.current
         .from('bullion_settings')
         .update({ is_active: val, updated_at: new Date() })
         .eq('id', 1);
+      
+      if (error) throw error;
+      
       showToast(val ? "Live streaming turned ON" : "Live streaming turned OFF");
     } catch (err) {
       console.error(err);
-      showToast("Failed to update status", true);
+      showToast("Failed to update status in Database: " + (err.message || "Permissions error"), true);
+      // Revert UI state on failure
+      setIsActive(!val);
     }
   };
 
