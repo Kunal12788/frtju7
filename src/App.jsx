@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import ServicesPanel from './ServicesPanel';
 
 // --- SUPABASE CONFIGURATION ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL; 
@@ -10,6 +11,7 @@ const ADMIN_PIN = "2580";
 const MAX_PIN_LENGTH = 4;
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('rates');
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isMfaRequired, setIsMfaRequired] = useState(false);
@@ -577,12 +579,33 @@ export default function App() {
             {authError && <div className="error-message" style={{ marginTop: '1rem' }}>{authError}</div>}
           </div>
         ) : (
-          /* Grid Dashboard Layout containing separated panels */
-          <div className="dashboard-grid">
-            
-            {/* LEFT COLUMN: Controls Panel */}
-            <div className="admin-card panel-controls">
-              <div className="admin-header-row">
+          <div style={{ width: '100%' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setActiveTab('rates')} 
+                className={`btn ${activeTab === 'rates' ? 'btn-primary' : ''}`}
+                style={{ background: activeTab === 'rates' ? 'var(--gold-primary)' : 'var(--bg-elevated)', color: activeTab === 'rates' ? '#000' : 'white', minWidth: '150px' }}
+              >
+                Live Rates Monitor
+              </button>
+              <button 
+                onClick={() => setActiveTab('services')} 
+                className={`btn ${activeTab === 'services' ? 'btn-primary' : ''}`}
+                style={{ background: activeTab === 'services' ? 'var(--gold-primary)' : 'var(--bg-elevated)', color: activeTab === 'services' ? '#000' : 'white', minWidth: '150px' }}
+              >
+                Services Directory
+              </button>
+            </div>
+
+            {activeTab === 'services' ? (
+              <ServicesPanel supabase={supabaseRef.current} />
+            ) : (
+              /* Grid Dashboard Layout containing separated panels */
+              <div className="dashboard-grid">
+                
+                {/* LEFT COLUMN: Controls Panel */}
+                <div className="admin-card panel-controls">
+                  <div className="admin-header-row">
                 <div className="admin-title-group">
                   <h2>System Command</h2>
                 </div>
@@ -842,10 +865,10 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
             </div>
-
           </div>
+          )}
+        </div>
         )}
       </main>
 
