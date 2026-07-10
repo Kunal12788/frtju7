@@ -47,6 +47,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", isError: false });
   const supabaseRef = useRef(null);
+  const authClientRef = useRef(null);
   const lastUpdatedAtRef = useRef(null);
 
   // Refs to hold configuration values so WebSocket doesn't need to reconnect on state changes
@@ -70,15 +71,22 @@ export default function App() {
   // Initialize Supabase Client once
   useEffect(() => {
     if (SUPABASE_URL && SUPABASE_WRITE_KEY) {
-      // Initialize Supabase with session persistence disabled (stores token in-memory only)
-      const client = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
+      // Initialize DB client (never signs in, remains service_role to bypass RLS)
+      supabaseRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
           detectSessionInUrl: false
         }
       });
-      supabaseRef.current = client;
+      // Initialize Auth client (used exclusively for login/session state)
+      authClientRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      });
     }
   }, []);
 
@@ -95,7 +103,7 @@ export default function App() {
     setAuthError("");
     setIsAuthLoading(true);
     try {
-      const { data, error } = await supabaseRef.current.auth.signInWithPassword({
+      const { data, error } = await authClientRef.current.auth.signInWithPassword({
         email,
         password
       });
@@ -112,21 +120,21 @@ export default function App() {
   // Check MFA & Enroll or Challenge
   const checkMfa = async (user) => {
     try {
-      const { data: factors, error: factorsErr } = await supabaseRef.current.auth.mfa.listFactors();
+      const { data: factors, error: factorsErr } = await authClientRef.current.auth.mfa.listFactors();
       if (factorsErr) throw factorsErr;
 
       // Self-healing: Delete any stuck, unverified TOTP factors to prevent duplicate enrollment errors
       const unverifiedFactors = factors?.all?.filter(f => f.status === 'unverified') || [];
       for (const f of unverifiedFactors) {
         try {
-          await supabaseRef.current.auth.mfa.unenroll({ factorId: f.id });
+          await authClientRef.current.auth.mfa.unenroll({ factorId: f.id });
         } catch (unenrollErr) {
           console.warn("Failed to unenroll unverified factor:", unenrollErr);
         }
       }
 
       // Re-fetch factors after clean-up
-      const { data: cleanFactors } = await supabaseRef.current.auth.mfa.listFactors();
+      const { data: cleanFactors } = await authClientRef.current.auth.mfa.listFactors();
       const enrolledFactors = cleanFactors?.all?.filter(f => f.status === 'verified') || [];
 
       if (enrolledFactors.length > 0) {
@@ -134,7 +142,7 @@ export default function App() {
         const factor = enrolledFactors[0];
         setMfaFactorId(factor.id);
 
-        const { data: challenge, error: challengeErr } = await supabaseRef.current.auth.mfa.challenge({
+        const { data: challenge, error: challengeErr } = await authClientRef.current.auth.mfa.challenge({
           factorId: factor.id
         });
         if (challengeErr) throw challengeErr;
@@ -144,7 +152,7 @@ export default function App() {
         setIsAuthLoading(false);
       } else {
         // Not Enrolled: Start Google Authenticator setup enrollment
-        const { data: enrollData, error: enrollErr } = await supabaseRef.current.auth.mfa.enroll({
+        const { data: enrollData, error: enrollErr } = await authClientRef.current.auth.mfa.enroll({
           factorType: 'totp',
           issuer: 'Vicky Jewellery Works',
           friendlyName: 'Vicky Admin'
@@ -156,7 +164,7 @@ export default function App() {
         setMfaSecret(enrollData.totp.secret);
 
         // Challenge for the initial enrollment verification
-        const { data: challenge, error: challengeErr } = await supabaseRef.current.auth.mfa.challenge({
+        const { data: challenge, error: challengeErr } = await authClientRef.current.auth.mfa.challenge({
           factorId: enrollData.id
         });
         if (challengeErr) throw challengeErr;
@@ -178,7 +186,7 @@ export default function App() {
     setAuthError("");
     setIsAuthLoading(true);
     try {
-      const { data, error } = await supabaseRef.current.auth.mfa.verify({
+      const { data, error } = await authClientRef.current.auth.mfa.verify({
         factorId: mfaFactorId,
         challengeId: mfaChallengeId,
         code: mfaCode
@@ -208,8 +216,8 @@ export default function App() {
   };
 
   const logout = async () => {
-    if (supabaseRef.current) {
-      await supabaseRef.current.auth.signOut();
+    if (authClientRef.current) {
+      await authClientRef.current.auth.signOut();
     }
     setIsAuthenticated(false);
     setIsMfaRequired(false);
