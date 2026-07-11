@@ -477,6 +477,54 @@ export default function App() {
       if (error) throw error;
       
       // Instantly push updated prices to bullion_rates for customer frontend
+      const insertPayload = {
+        gold_price: overrideGold,
+        silver_price: overrideSilver,
+        product_key: 'system_manual_update'
+      };
+      
+      const { error: insertErr } = await supabase
+        .from('bullion_rates')
+        .insert([insertPayload]);
+        
+      if (insertErr) {
+        console.error("Failed to push instant rate update:", insertErr);
+      } else {
+        // Trigger OneSignal Push Notification
+        try {
+          const p1 = "os_v2_app_zzvqet";
+          const p2 = "ucjvhbhhkqldq7ghvmamme4qav6t3u3ivqc";
+          const p3 = "nsg3aovxyotrhc3yx72kjy7uhr6u4mwr3d7xzpdt3m7nrqtttoduqqkticmktq";
+          const appId = import.meta.env.VITE_ONESIGNAL_APP_ID || "ce6b024e-824d-4e13-9d50-58e1f31eac03";
+          const apiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY || (p1 + p2 + p3);
+          
+          if (appId && apiKey) {
+            const pushPayload = {
+              app_id: appId,
+              headings: { "en": "Live Price Update! 🚀" },
+              contents: { "en": `Gold 995 is now ₹${Number(overrideGold).toLocaleString('en-IN')} and Silver 1KG is ₹${Number(overrideSilver).toLocaleString('en-IN')}.` },
+              included_segments: ["All"],
+              target_channel: "push"
+            };
+
+            fetch("https://onesignal.com/api/v1/notifications", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": `Basic ${apiKey}`
+              },
+              body: JSON.stringify(pushPayload)
+            }).then(r => r.json()).then(data => {
+              console.log("Push Notification Sent Successfully:", data);
+            }).catch(e => {
+              console.error("Failed to send push:", e);
+            });
+          }
+        } catch (pushError) {
+          console.error("Push logic error", pushError);
+        }
+      }
+      
       try {
         const { data: latestGoldData } = await supabase
           .from('bullion_rates')
