@@ -664,12 +664,21 @@ export default function App() {
                   <select 
                     value={marketClosedReason}
                     onChange={(e) => {
-                      setMarketClosedReason(e.target.value);
+                      const val = e.target.value;
+                      setMarketClosedReason(val);
                       // Auto-save the reason to DB for instant reflection on customer screens
                       if (supabaseRef.current) {
                         supabaseRef.current.from('bullion_settings')
-                          .update({ market_closed_reason: e.target.value, updated_at: new Date() })
-                          .eq('id', 1).then(() => showToast("Reason updated live!"));
+                          .update({ market_closed_reason: val, updated_at: new Date() })
+                          .eq('id', 1)
+                          .then(({ error }) => {
+                            if (error) {
+                              console.error("DB Error:", error);
+                              showToast("Database Error: " + error.message, true);
+                            } else {
+                              showToast("Reason updated live!");
+                            }
+                          });
                       }
                     }}
                     style={{
