@@ -475,6 +475,68 @@ export default function App() {
         .eq('id', 1);
 
       if (error) throw error;
+      
+      // Instantly push updated prices to bullion_rates for customer frontend
+      try {
+        const { data: latestGoldData } = await supabase
+          .from('bullion_rates')
+          .select('*')
+          .in('item', ['gold_995_100gms', 'gold-24k-100g'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        let rawGold = 0;
+        let lastGoldRow = null;
+        if (latestGoldData && latestGoldData.length > 0) {
+          lastGoldRow = latestGoldData[0];
+          const match = lastGoldRow.raw_text && lastGoldRow.raw_text.match(/OCR Raw:\s*([\d.]+)/);
+          rawGold = match ? parseFloat(match[1]) : lastGoldRow.price;
+        }
+
+        const { data: latestSilverData } = await supabase
+          .from('bullion_rates')
+          .select('*')
+          .in('item', ['silver_999_1kg', 'silver-999-1kg'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        let rawSilver = 0;
+        let lastSilverRow = null;
+        if (latestSilverData && latestSilverData.length > 0) {
+          lastSilverRow = latestSilverData[0];
+          const match = lastSilverRow.raw_text && lastSilverRow.raw_text.match(/OCR Raw:\s*([\d.]+)/);
+          rawSilver = match ? parseFloat(match[1]) : lastSilverRow.price;
+        }
+
+        const newRows = [];
+        if (lastGoldRow) {
+          const finalGold = payload.use_gold_override ? payload.override_gold : (rawGold + payload.gold_adjustment);
+          newRows.push({
+            item: lastGoldRow.item,
+            label: lastGoldRow.label,
+            price: finalGold,
+            unit: lastGoldRow.unit,
+            raw_text: payload.use_gold_override ? "Admin Manual Override" : `OCR Raw: ${rawGold} | Adjusted by: ${payload.gold_adjustment > 0 ? '+' : ''}${payload.gold_adjustment}`
+          });
+        }
+        if (lastSilverRow) {
+          const finalSilver = payload.use_silver_override ? payload.override_silver : (rawSilver + payload.silver_adjustment);
+          newRows.push({
+            item: lastSilverRow.item,
+            label: lastSilverRow.label,
+            price: finalSilver,
+            unit: lastSilverRow.unit,
+            raw_text: payload.use_silver_override ? "Admin Manual Override" : `OCR Raw: ${rawSilver} | Adjusted by: ${payload.silver_adjustment > 0 ? '+' : ''}${payload.silver_adjustment}`
+          });
+        }
+
+        if (newRows.length > 0) {
+          await supabase.from('bullion_rates').insert(newRows);
+        }
+      } catch (insertErr) {
+        console.error("Failed to push instant rate update:", insertErr);
+      }
+
       showToast("Settings applied & live rate updated!");
     } catch (err) {
       console.error("Failed to save settings:", err);
