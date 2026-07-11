@@ -36,6 +36,7 @@ export default function App() {
   const [silverAdjust, setSilverAdjust] = useState(0);
   const [useSilverOverride, setUseSilverOverride] = useState(false);
   const [overrideSilver, setOverrideSilver] = useState(0);
+  const [marketClosedReason, setMarketClosedReason] = useState('default');
 
   // Live Live Price Stats (What is active in the DB right now)
   const [goldOcr, setGoldOcr] = useState(null);
@@ -275,6 +276,7 @@ export default function App() {
           setSilverAdjust(parseFloat(settings.silver_adjustment) || 0);
           setUseSilverOverride(settings.use_silver_override);
           setOverrideSilver(parseFloat(settings.override_silver) || 0);
+          setMarketClosedReason(settings.market_closed_reason || 'default');
 
           // B. Load Recent Price history logs
           const { data: goldHist } = await supabase
@@ -368,6 +370,7 @@ export default function App() {
         setSilverAdjust(row.silver_adjustment);
         setUseSilverOverride(row.use_silver_override);
         setOverrideSilver(row.override_silver);
+        setMarketClosedReason(row.market_closed_reason || 'default');
       })
       .subscribe();
 
@@ -460,6 +463,7 @@ export default function App() {
       silver_adjustment: parseFloat(silverAdjust) || 0,
       use_silver_override: useSilverOverride,
       override_silver: parseFloat(overrideSilver) || 0,
+      market_closed_reason: marketClosedReason,
       last_active_at: new Date(),
       updated_at: new Date()
     };
@@ -644,6 +648,47 @@ export default function App() {
                   <span className="slider"></span>
                 </label>
               </div>
+
+              {/* Market Closed Reason Selector */}
+              {!isActive && (
+                <div className="reason-selector-container" style={{
+                  marginBottom: '1.5rem',
+                  padding: '1rem',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{ marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                    Reason for closing the market:
+                  </div>
+                  <select 
+                    value={marketClosedReason}
+                    onChange={(e) => {
+                      setMarketClosedReason(e.target.value);
+                      // Auto-save the reason to DB for instant reflection on customer screens
+                      if (supabaseRef.current) {
+                        supabaseRef.current.from('bullion_settings')
+                          .update({ market_closed_reason: e.target.value, updated_at: new Date() })
+                          .eq('id', 1).then(() => showToast("Reason updated live!"));
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="default">Standard "Market Closed" Message</option>
+                    <option value="good_night">🌙 Good Night Message</option>
+                  </select>
+                </div>
+              )}
 
               {/* GOLD CONTROLS PANEL */}
               <div className="metal-control-section gold-section">
