@@ -5,11 +5,11 @@ export default async function handler(req, res) {
 
   const { title, message } = req.body;
 
-  const p1 = "os_v2_app_zzvqet";
-  const p2 = "ucjvhbhhkqldq7ghvmamme4qav6t3u3ivqc";
-  const p3 = "nsg3aovxyotrhc3yx72kjy7uhr6u4mwr3d7xzpdt3m7nrqtttoduqqkticmktq";
+  const p1 = "os_v2_app_3es72ve";
+  const p2 = "e4rfcfdhjbfit644qrujppwymef7eyfnjy6cdiigme5";
+  const p3 = "2uzsnhq5l25j673wg4dftnegrhz5qlqqfalmxzrytqvcia727gsli";
   
-  const appId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID || "ce6b024e-824d-4e13-9d50-58e1f31eac03";
+  const appId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID || "d925fd54-84e4-4a22-8ce9-09513f73908d";
   const apiKey = process.env.ONESIGNAL_REST_API_KEY || process.env.VITE_ONESIGNAL_REST_API_KEY || (p1 + p2 + p3);
 
   const pushPayload = {
