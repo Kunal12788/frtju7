@@ -476,42 +476,7 @@ export default function App() {
 
       if (error) throw error;
       
-      // Instantly push updated prices to bullion_rates for customer frontend
-      const insertPayload = {
-        gold_price: overrideGold,
-        silver_price: overrideSilver,
-        product_key: 'system_manual_update'
-      };
-      
-      const { error: insertErr } = await supabase
-        .from('bullion_rates')
-        .insert([insertPayload]);
-        
-      if (insertErr) {
-        console.error("Failed to push instant rate update:", insertErr);
-      } else {
-        // Trigger OneSignal Push Notification via Vercel Backend to bypass CORS
-        try {
-          const pushPayload = {
-            title: "Live Price Update! 🚀",
-            message: `Gold 995 is now ₹${Number(overrideGold).toLocaleString('en-IN')} and Silver 1KG is ₹${Number(overrideSilver).toLocaleString('en-IN')}.`
-          };
-
-          fetch("/api/push", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(pushPayload)
-          }).then(r => r.json()).then(data => {
-            console.log("Push Notification Sent via Backend:", data);
-          }).catch(e => {
-            console.error("Failed to send push via backend:", e);
-          });
-        } catch (pushError) {
-          console.error("Push logic error", pushError);
-        }
-      }
+      // The local agent (in_memory_agent.py) monitors settings and handles rates updates/push notifications cleanly.
       
       try {
         const { data: latestGoldData } = await supabase
