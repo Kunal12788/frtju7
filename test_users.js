@@ -5,9 +5,8 @@ dotenv.config();
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_KEY);
 
 async function run() {
-  console.log("Updating is_active to false...");
-  const { data, error } = await supabase.from('bullion_settings').update({ is_active: true, updated_at: new Date() }).eq('id', 1);
+  const { data: { users }, error } = await supabase.auth.admin.listUsers();
   if (error) console.error("Error:", error);
-  else console.log("Update success!");
+  else console.log("Users:", users.map(u => ({ email: u.email, id: u.id })));
 }
 run();

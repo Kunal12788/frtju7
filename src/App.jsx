@@ -37,6 +37,11 @@ export default function App() {
   const [useSilverOverride, setUseSilverOverride] = useState(false);
   const [overrideSilver, setOverrideSilver] = useState(0);
   const [marketClosedReason, setMarketClosedReason] = useState('default');
+  
+  // Advertisement State
+  const [showAdvertisement, setShowAdvertisement] = useState(false);
+  const [advertisementUrl, setAdvertisementUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   // Live Live Price Stats (What is active in the DB right now)
   const [goldOcr, setGoldOcr] = useState(null);
@@ -277,6 +282,8 @@ export default function App() {
           setUseSilverOverride(settings.use_silver_override);
           setOverrideSilver(parseFloat(settings.override_silver) || 0);
           setMarketClosedReason(settings.market_closed_reason || 'default');
+          setShowAdvertisement(settings.show_advertisement || false);
+          setAdvertisementUrl(settings.advertisement_url || "");
 
           // B. Load Recent Price history logs
           const { data: goldHist } = await supabase
@@ -464,6 +471,8 @@ export default function App() {
       use_silver_override: useSilverOverride,
       override_silver: parseFloat(overrideSilver) || 0,
       market_closed_reason: marketClosedReason,
+      show_advertisement: showAdvertisement,
+      advertisement_url: advertisementUrl,
       last_active_at: new Date(),
       updated_at: new Date()
     };
@@ -564,6 +573,42 @@ export default function App() {
   // Preview monitor calculations
   const finalGoldDisplay = useGoldOverride ? overrideGold : (goldOcr ? (goldOcr + goldAdjust) : null);
   const finalSilverDisplay = useSilverOverride ? overrideSilver : (silverOcr ? (silverOcr + silverAdjust) : null);
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!supabaseRef.current) return;
+    setIsUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
+
+    try {
+      const { error: uploadError } = await supabaseRef.current.storage
+        .from('ads')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabaseRef.current.storage
+        .from('ads')
+        .getPublicUrl(fileName);
+
+      setAdvertisementUrl(data.publicUrl);
+      showToast("Media uploaded successfully. Remember to publish changes!");
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to upload media.", true);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleClearAd = async () => {
+    setAdvertisementUrl("");
+    setShowAdvertisement(false);
+    showToast("Advertisement cleared. Remember to publish changes!");
+  };
 
   return (
     <>
@@ -871,6 +916,52 @@ export default function App() {
                       />
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* ADVERTISEMENT CONTROL PANEL */}
+              <div className="metal-control-section" style={{ borderLeftColor: '#8b5cf6' }}>
+                <div className="section-title">
+                  <span>PROMOTIONAL SCREEN</span>
+                  <span>🎉</span>
+                </div>
+
+                <div className="override-container">
+                  <div className="override-row">
+                    <span className="override-label">Show Advertisement Overlay</span>
+                    <label className="switch" style={{ width: '44px', height: '26px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={showAdvertisement} 
+                        onChange={(e) => setShowAdvertisement(e.target.checked)} 
+                      />
+                      <span className="slider" style={{ borderRadius: '26px' }}></span>
+                    </label>
+                  </div>
+                  <div className="stepper-container" style={{ marginTop: '16px' }}>
+                    <label>Upload Offer / Ad Image</label>
+                    <input 
+                      type="file" 
+                      accept="image/*,video/*"
+                      onChange={handleFileUpload} 
+                      disabled={isUploading}
+                      style={{ marginTop: '8px', marginBottom: '12px' }}
+                    />
+                    {isUploading && <span style={{ color: '#8b5cf6', fontSize: '14px' }}>Uploading...</span>}
+                    {advertisementUrl && (
+                      <div style={{ marginTop: '10px' }}>
+                        <div style={{ marginBottom: '8px', fontSize: '13px', color: '#94a3b8' }}>Current Ad Media:</div>
+                        {advertisementUrl.match(/\.(mp4|webm|ogg)(\?.*)?$/i) ? (
+                          <video src={advertisementUrl} style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '8px' }} controls />
+                        ) : (
+                          <img src={advertisementUrl} alt="Ad" style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '8px' }} />
+                        )}
+                        <div style={{ marginTop: '8px' }}>
+                          <button className="step-btn minus" onClick={handleClearAd} style={{ padding: '6px 12px', fontSize: '13px' }}>Clear Media</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
