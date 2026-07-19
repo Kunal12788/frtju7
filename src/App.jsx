@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import ServicesPanel from './ServicesPanel';
+import PendingCustomersPanel from './PendingCustomersPanel';
 
 // --- SUPABASE CONFIGURATION ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL; 
@@ -709,13 +710,20 @@ export default function App() {
           </div>
         ) : (
           <div style={{ width: '100%' }}>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button 
                 onClick={() => setActiveTab('rates')} 
                 className={`btn ${activeTab === 'rates' ? 'btn-primary' : ''}`}
                 style={{ background: activeTab === 'rates' ? 'var(--gold-primary)' : 'var(--bg-elevated)', color: activeTab === 'rates' ? '#000' : 'white', minWidth: '150px' }}
               >
                 Live Rates Monitor
+              </button>
+              <button 
+                onClick={() => setActiveTab('whatsapp')} 
+                className={`btn ${activeTab === 'whatsapp' ? 'btn-primary' : ''}`}
+                style={{ background: activeTab === 'whatsapp' ? 'var(--gold-primary)' : 'var(--bg-elevated)', color: activeTab === 'whatsapp' ? '#000' : 'white', minWidth: '150px' }}
+              >
+                Pending WhatsApp Signups
               </button>
               <button 
                 onClick={() => setActiveTab('services')} 
@@ -728,6 +736,8 @@ export default function App() {
 
             {activeTab === 'services' ? (
               <ServicesPanel supabase={supabaseRef.current} />
+            ) : activeTab === 'whatsapp' ? (
+              <PendingCustomersPanel mainSupabase={supabaseRef.current} />
             ) : (
               /* Grid Dashboard Layout containing separated panels */
               <div className="dashboard-grid">
