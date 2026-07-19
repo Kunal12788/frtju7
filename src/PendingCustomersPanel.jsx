@@ -5,7 +5,7 @@ const TEMP_SUPABASE_URL = import.meta.env.VITE_TEMP_SUPABASE_URL;
 const TEMP_SUPABASE_ANON_KEY = import.meta.env.VITE_TEMP_SUPABASE_ANON_KEY;
 
 export default function PendingCustomersPanel({ mainSupabase }) {
-  const [pendingList, setPendingList] = useState([]);
+  const [customerList, setCustomerList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
   const [toast, setToast] = useState({ show: false, message: '', isError: false });
@@ -32,10 +32,10 @@ export default function PendingCustomersPanel({ mainSupabase }) {
   };
 
   useEffect(() => {
-    fetchPendingCustomers();
+    fetchCustomers();
   }, []);
 
-  const fetchPendingCustomers = async () => {
+  const fetchCustomers = async () => {
     try {
       setIsLoading(true);
       if (!registrationSupabase) return;
@@ -46,57 +46,23 @@ export default function PendingCustomersPanel({ mainSupabase }) {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPendingList(data || []);
+      setCustomerList(data || []);
     } catch (err) {
-      console.error('Failed to fetch pending WhatsApp customers:', err);
+      console.error('Failed to fetch registration entries:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleApprove = async (customer) => {
-    try {
-      setProcessingId(customer.id);
-
-      // 1. Insert into Main Database (Project A) active customers table
-      if (mainSupabase) {
-        const { error: insertError } = await mainSupabase
-          .from('bullion_whatsapp_customers')
-          .insert([{
-            contact_name: customer.contact_name,
-            phone_number: customer.phone_number,
-            shop_name: customer.shop_name || '',
-            address: customer.address || '',
-            preferred_language: customer.preferred_language || 'english',
-            priority: 'medium',
-            is_active: true
-          }]);
-
-        if (insertError) throw insertError;
-      }
-
-      // 2. Delete from Pending Database (Project B)
-      if (registrationSupabase) {
-        const { error: deleteError } = await registrationSupabase
-          .from('pending_whatsapp_subscriptions')
-          .delete()
-          .eq('id', customer.id);
-
-        if (deleteError) console.warn('Could not delete from pending table:', deleteError);
-      }
-
-      showToast(`Approved ${customer.contact_name}! Live rate alerts activated.`);
-      fetchPendingCustomers();
-    } catch (err) {
-      console.error('Approval failed:', err);
-      showToast(err.message || 'Failed to approve customer.', true);
-    } finally {
-      setProcessingId(null);
-    }
+  const handleCopyDetails = (customer) => {
+    const textToCopy = `Name: ${customer.contact_name}\nPhone: ${customer.phone_number}\nShop: ${customer.shop_name || 'N/A'}\nAddress: ${customer.address || 'N/A'}\nLanguage: ${customer.preferred_language || 'english'}`;
+    
+    navigator.clipboard.writeText(textToCopy);
+    showToast(`Copied details for ${customer.contact_name} to clipboard!`);
   };
 
-  const handleReject = async (customer) => {
-    if (!window.confirm(`Are you sure you want to reject and remove ${customer.contact_name}?`)) return;
+  const handleDelete = async (customer) => {
+    if (!window.confirm(`Are you sure you want to delete the entry for ${customer.contact_name}?`)) return;
 
     try {
       setProcessingId(customer.id);
@@ -109,11 +75,11 @@ export default function PendingCustomersPanel({ mainSupabase }) {
         if (error) throw error;
       }
 
-      showToast(`Removed registration for ${customer.contact_name}.`);
-      fetchPendingCustomers();
+      showToast(`Deleted registration for ${customer.contact_name}.`);
+      fetchCustomers();
     } catch (err) {
-      console.error('Rejection failed:', err);
-      showToast('Failed to remove pending registration.', true);
+      console.error('Deletion failed:', err);
+      showToast('Failed to delete entry.', true);
     } finally {
       setProcessingId(null);
     }
@@ -123,13 +89,13 @@ export default function PendingCustomersPanel({ mainSupabase }) {
     <div className="admin-card panel-controls" style={{ width: '100%' }}>
       <div className="admin-header-row" style={{ marginBottom: '20px' }}>
         <div className="admin-title-group">
-          <h2>Pending WhatsApp Customer Approvals</h2>
+          <h2>Registered WhatsApp Customers (Project B)</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-            Review new customer signups. Approved customers will immediately start receiving automated WhatsApp rate updates & greetings.
+            View customer details submitted via the signup page. They are stored isolated in Project B and never automatically added to your main database.
           </p>
         </div>
         <button 
-          onClick={fetchPendingCustomers} 
+          onClick={fetchCustomers} 
           className="btn" 
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: '#fff' }}
         >
@@ -139,9 +105,9 @@ export default function PendingCustomersPanel({ mainSupabase }) {
 
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-          Loading pending customer requests...
+          Loading registered customers...
         </div>
-      ) : pendingList.length === 0 ? (
+      ) : customerList.length === 0 ? (
         <div style={{ 
           textAlign: 'center', 
           padding: '40px 20px', 
@@ -150,11 +116,11 @@ export default function PendingCustomersPanel({ mainSupabase }) {
           border: '1px solid var(--border)', 
           color: 'var(--text-secondary)' 
         }}>
-          ✨ No pending WhatsApp registration requests. New customer signups will appear here automatically!
+          ✨ No entries in Project B registration database yet. Customer signups will appear here!
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '14px', width: '100%' }}>
-          {pendingList.map(c => (
+          {customerList.map(c => (
             <div 
               key={c.id} 
               style={{ 
@@ -173,9 +139,9 @@ export default function PendingCustomersPanel({ mainSupabase }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
                   <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '1.1rem' }}>{c.contact_name}</span>
                   <span style={{ 
-                    background: 'rgba(37, 211, 102, 0.15)', 
-                    border: '1px solid rgba(37, 211, 102, 0.4)', 
-                    color: '#25D366', 
+                    background: 'rgba(212, 175, 55, 0.15)', 
+                    border: '1px solid rgba(212, 175, 55, 0.4)', 
+                    color: '#d4af37', 
                     padding: '2px 8px', 
                     borderRadius: '12px', 
                     fontSize: '11px', 
@@ -190,29 +156,27 @@ export default function PendingCustomersPanel({ mainSupabase }) {
                   <div>📞 <strong style={{ color: '#fff' }}>{c.phone_number}</strong></div>
                   {c.shop_name && <div>🏪 Shop: <strong style={{ color: 'var(--gold-primary)' }}>{c.shop_name}</strong></div>}
                   {c.address && <div>📍 {c.address}</div>}
-                  <div>📅 Registered: {new Date(c.created_at).toLocaleDateString()}</div>
+                  <div>📅 Date: {new Date(c.created_at).toLocaleDateString()}</div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
-                  onClick={() => handleApprove(c)}
-                  disabled={processingId === c.id}
+                  onClick={() => handleCopyDetails(c)}
                   style={{
-                    background: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
                     color: '#fff',
-                    border: 'none',
-                    padding: '10px 18px',
+                    padding: '10px 16px',
                     borderRadius: '8px',
                     fontWeight: 'bold',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 10px rgba(37, 211, 102, 0.3)'
+                    cursor: 'pointer'
                   }}
                 >
-                  {processingId === c.id ? 'Approving...' : '✓ Approve & Activate'}
+                  📋 Copy Info
                 </button>
                 <button
-                  onClick={() => handleReject(c)}
+                  onClick={() => handleDelete(c)}
                   disabled={processingId === c.id}
                   style={{
                     background: 'rgba(239, 68, 68, 0.1)',
@@ -224,7 +188,7 @@ export default function PendingCustomersPanel({ mainSupabase }) {
                     cursor: 'pointer'
                   }}
                 >
-                  Reject
+                  {processingId === c.id ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>
