@@ -5,7 +5,8 @@ import PendingCustomersPanel from './PendingCustomersPanel';
 
 // --- SUPABASE CONFIGURATION ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL; 
-const SUPABASE_WRITE_KEY = import.meta.env.VITE_SUPABASE_KEY;  
+const SUPABASE_WRITE_KEY = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;  
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_WRITE_KEY;
 
 // Passcode PIN (Default: 2580)
 const ADMIN_PIN = "2580";
@@ -77,9 +78,9 @@ export default function App() {
 
   // Initialize Supabase Client once
   useEffect(() => {
-    if (SUPABASE_URL && SUPABASE_WRITE_KEY) {
+    if (SUPABASE_URL && (SUPABASE_WRITE_KEY || SUPABASE_ANON_KEY)) {
       // Initialize DB client (never signs in, remains service_role to bypass RLS)
-      supabaseRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
+      supabaseRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY || SUPABASE_ANON_KEY, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
@@ -87,7 +88,7 @@ export default function App() {
         }
       });
       // Initialize Auth client (used exclusively for login/session state)
-      authClientRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
+      authClientRef.current = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_WRITE_KEY, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
@@ -456,6 +457,23 @@ export default function App() {
     }
   };
 
+  const toggleAdvertisementState = async (val) => {
+    setShowAdvertisement(val);
+    if (!supabaseRef.current) return;
+    try {
+      const { error } = await supabaseRef.current
+        .from('bullion_settings')
+        .update({ show_advertisement: val, advertisement_url: advertisementUrl, updated_at: new Date() })
+        .eq('id', 1);
+      if (error) throw error;
+      showToast(val ? "Promotional Overlay turned ON" : "Promotional Overlay turned OFF");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update promotional status: " + (err.message || "Error"), true);
+      setShowAdvertisement(!val);
+    }
+  };
+
   // Save changes to database
   const saveAllSettings = async () => {
     if (!supabaseRef.current) return;
@@ -579,36 +597,79 @@ export default function App() {
     const file = event.target.files[0];
     if (!file) return;
 
-    if (!supabaseRef.current) return;
+    if (!supabaseRef.current) {
+      showToast("Database client not ready. Please try again.", true);
+      return;
+    }
     setIsUploading(true);
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
 
     try {
-      const { error: uploadError } = await supabaseRef.current.storage
+      // 1. Attempt upload to 'ads' bucket
+      let uploadRes = await supabaseRef.current.storage
         .from('ads')
-        .upload(fileName, file);
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
-      if (uploadError) throw uploadError;
+      let targetBucket = 'ads';
+
+      // 2. Fallback to 'advertisements' bucket if 'ads' fails
+      if (uploadRes.error) {
+        console.warn("Upload to 'ads' bucket encountered notice, trying 'advertisements' bucket:", uploadRes.error);
+        uploadRes = await supabaseRef.current.storage
+          .from('advertisements')
+          .upload(fileName, file, { cacheControl: '3600', upsert: true });
+        if (!uploadRes.error) {
+          targetBucket = 'advertisements';
+        }
+      }
+
+      // 3. Fallback to 'bank_images' bucket if needed
+      if (uploadRes.error) {
+        console.warn("Upload to 'advertisements' failed, trying 'bank_images' bucket:", uploadRes.error);
+        uploadRes = await supabaseRef.current.storage
+          .from('bank_images')
+          .upload(fileName, file, { cacheControl: '3600', upsert: true });
+        if (!uploadRes.error) {
+          targetBucket = 'bank_images';
+        }
+      }
+
+      if (uploadRes.error) throw uploadRes.error;
 
       const { data } = supabaseRef.current.storage
-        .from('ads')
+        .from(targetBucket)
         .getPublicUrl(fileName);
 
+      if (!data || !data.publicUrl) {
+        throw new Error("Could not retrieve public URL for uploaded media");
+      }
+
       setAdvertisementUrl(data.publicUrl);
-      showToast("Media uploaded successfully. Remember to publish changes!");
+      showToast("Media uploaded successfully! Click 'Publish Changes Live' to broadcast.");
     } catch (error) {
-      console.error(error);
-      showToast("Failed to upload media.", true);
+      console.error("File upload error:", error);
+      showToast("Failed to upload media: " + (error.message || "Storage permission issue"), true);
     } finally {
       setIsUploading(false);
+      if (event.target) event.target.value = '';
     }
   };
 
   const handleClearAd = async () => {
     setAdvertisementUrl("");
     setShowAdvertisement(false);
-    showToast("Advertisement cleared. Remember to publish changes!");
+    if (supabaseRef.current) {
+      try {
+        await supabaseRef.current
+          .from('bullion_settings')
+          .update({ show_advertisement: false, advertisement_url: "", updated_at: new Date() })
+          .eq('id', 1);
+      } catch (e) {
+        console.warn("Failed to clear ad in DB instantly:", e);
+      }
+    }
+    showToast("Promotional media cleared!");
   };
 
   return (
@@ -943,31 +1004,56 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={showAdvertisement} 
-                        onChange={(e) => setShowAdvertisement(e.target.checked)} 
+                        onChange={(e) => toggleAdvertisementState(e.target.checked)} 
                       />
                       <span className="slider" style={{ borderRadius: '26px' }}></span>
                     </label>
                   </div>
                   <div className="stepper-container" style={{ marginTop: '16px' }}>
-                    <label>Upload Offer / Ad Image</label>
+                    <label>Upload Offer / Ad File</label>
                     <input 
                       type="file" 
                       accept="image/*,video/*"
                       onChange={handleFileUpload} 
                       disabled={isUploading}
-                      style={{ marginTop: '8px', marginBottom: '12px' }}
+                      style={{ marginTop: '8px', marginBottom: '10px' }}
                     />
-                    {isUploading && <span style={{ color: '#8b5cf6', fontSize: '14px' }}>Uploading...</span>}
+                    {isUploading && <div style={{ color: '#8b5cf6', fontSize: '13px', marginBottom: '8px' }}>⏳ Uploading to cloud storage...</div>}
+
+                    <div style={{ marginTop: '10px', marginBottom: '10px' }}>
+                      <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        Or Paste Direct Image / Video URL:
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="https://example.com/ad-poster.jpg"
+                        value={advertisementUrl}
+                        onChange={(e) => setAdvertisementUrl(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                          background: 'rgba(0, 0, 0, 0.25)',
+                          color: '#fff',
+                          fontSize: '13px',
+                          fontFamily: 'monospace'
+                        }}
+                      />
+                    </div>
+
                     {advertisementUrl && (
-                      <div style={{ marginTop: '10px' }}>
-                        <div style={{ marginBottom: '8px', fontSize: '13px', color: '#94a3b8' }}>Current Ad Media:</div>
+                      <div style={{ marginTop: '14px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                        <div style={{ marginBottom: '8px', fontSize: '12px', color: '#94a3b8', fontWeight: 'bold' }}>Current Ad Media Preview:</div>
                         {advertisementUrl.match(/\.(mp4|webm|ogg)(\?.*)?$/i) ? (
-                          <video src={advertisementUrl} style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '8px' }} controls />
+                          <video src={advertisementUrl} style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', display: 'block' }} controls />
                         ) : (
-                          <img src={advertisementUrl} alt="Ad" style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '8px' }} />
+                          <img src={advertisementUrl} alt="Ad Preview" style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', display: 'block' }} />
                         )}
-                        <div style={{ marginTop: '8px' }}>
-                          <button className="step-btn minus" onClick={handleClearAd} style={{ padding: '6px 12px', fontSize: '13px' }}>Clear Media</button>
+                        <div style={{ marginTop: '10px' }}>
+                          <button className="step-btn minus" onClick={handleClearAd} style={{ padding: '6px 14px', fontSize: '12px', width: 'auto' }}>
+                            🗑️ Clear Promotional Media
+                          </button>
                         </div>
                       </div>
                     )}
