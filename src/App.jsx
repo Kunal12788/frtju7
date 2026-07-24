@@ -28,7 +28,9 @@ const MAX_PIN_LENGTH = 4;
 export default function App() {
   const [activeTab, setActiveTab] = useState('rates');
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('admin_auth') === 'true';
+  });
   const [isMfaRequired, setIsMfaRequired] = useState(false);
   const [mfaQrCode, setMfaQrCode] = useState(null);
   const [mfaSecret, setMfaSecret] = useState("");
@@ -118,17 +120,28 @@ export default function App() {
     }, 2500);
   };
 
-  // Sign In with Email/Password
+  // Sign In with Email/Password or PIN
   const handleSignIn = async (e) => {
     if (e) e.preventDefault();
     setAuthError("");
     setIsAuthLoading(true);
+
+    // Fast Passcode PIN check (Default: 2580)
+    if (password === ADMIN_PIN || email === ADMIN_PIN) {
+      localStorage.setItem('admin_auth', 'true');
+      setIsAuthenticated(true);
+      setIsAuthLoading(false);
+      showToast("Access Authorized!");
+      return;
+    }
+
     try {
       const { data, error } = await authClientRef.current.auth.signInWithPassword({
         email,
         password
       });
       if (error) throw error;
+      localStorage.setItem('admin_auth', 'true');
       await checkMfa(data.user);
     } catch (err) {
       console.error(err);
@@ -215,6 +228,7 @@ export default function App() {
       if (error) throw error;
 
       // Access granted!
+      localStorage.setItem('admin_auth', 'true');
       setIsAuthenticated(true);
       setIsMfaRequired(false);
       showToast("Access Authorized!");
@@ -238,8 +252,9 @@ export default function App() {
 
   const logout = async () => {
     if (authClientRef.current) {
-      await authClientRef.current.auth.signOut();
+      try { await authClientRef.current.auth.signOut(); } catch (e) {}
     }
+    localStorage.removeItem('admin_auth');
     setIsAuthenticated(false);
     setIsMfaRequired(false);
     setMfaQrCode(null);
@@ -273,7 +288,7 @@ export default function App() {
 
   // 1. One-time Setup: Subscriptions & Initial Loads
   useEffect(() => {
-    if (!isAuthenticated || !supabaseRef.current) return;
+    if (!supabaseRef.current) return;
 
     const supabase = supabaseRef.current;
 
@@ -417,7 +432,7 @@ export default function App() {
       settingsChannel.unsubscribe();
       clearInterval(heartbeatTimer);
     };
-  }, [isAuthenticated]);
+  }, []);
 
   // Instant saving helpers for switches to prevent heartbeat race conditions
   const toggleActiveState = async (val) => {
