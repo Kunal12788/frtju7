@@ -94,12 +94,21 @@ export default function App() {
   // Initialize Supabase Client once
   useEffect(() => {
     if (SUPABASE_URL) {
+      // Dummy storage engine to completely prevent Supabase clients from reading/writing 
+      // old contaminated session tokens in the browser's localStorage.
+      const dummyStorage = {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {}
+      };
+
       // Initialize DB & Storage client (always uses service_role key to bypass RLS for DB & storage uploads)
       supabaseRef.current = createClient(SUPABASE_URL, DEFAULT_SERVICE_ROLE_KEY, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
-          detectSessionInUrl: false
+          detectSessionInUrl: false,
+          storage: dummyStorage
         }
       });
       // Initialize Auth client (used exclusively for user login/session state)
@@ -107,7 +116,8 @@ export default function App() {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
-          detectSessionInUrl: false
+          detectSessionInUrl: false,
+          storage: dummyStorage
         }
       });
     }
