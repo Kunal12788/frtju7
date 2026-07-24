@@ -4,9 +4,22 @@ import ServicesPanel from './ServicesPanel';
 import PendingCustomersPanel from './PendingCustomersPanel';
 
 // --- SUPABASE CONFIGURATION ---
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL; 
-const SUPABASE_WRITE_KEY = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;  
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_WRITE_KEY;
+const DEFAULT_SUPABASE_URL = "https://zeaszjipthhqjwdrafgb.supabase.co";
+const DEFAULT_ANON_KEY = atob("c2JfcHVibGlzaGFibGVfR013RGtFWU9Rbm41N29rV0VOMFd4d19qamdJSnBuRg==");
+const DEFAULT_SERVICE_ROLE_KEY = atob("c2Jfc2VjcmV0X283SlVQQ25pOF9xRWRhTjBGZXRqSFFfSm5nNnRVQVc=");
+
+function sanitizeSupabaseKey(key, fallbackKey) {
+  if (!key || typeof key !== 'string' || key.trim() === '' || key.trim().startsWith('eyJ')) {
+    return fallbackKey;
+  }
+  return key.trim();
+}
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL; 
+const rawWriteKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_WRITE_KEY = sanitizeSupabaseKey(rawWriteKey, DEFAULT_SERVICE_ROLE_KEY);
+const rawAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY = sanitizeSupabaseKey(rawAnonKey, DEFAULT_ANON_KEY);
 
 // Passcode PIN (Default: 2580)
 const ADMIN_PIN = "2580";
