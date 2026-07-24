@@ -91,17 +91,17 @@ export default function App() {
 
   // Initialize Supabase Client once
   useEffect(() => {
-    if (SUPABASE_URL && (SUPABASE_WRITE_KEY || SUPABASE_ANON_KEY)) {
-      // Initialize DB client (never signs in, remains service_role to bypass RLS)
-      supabaseRef.current = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY || SUPABASE_ANON_KEY, {
+    if (SUPABASE_URL) {
+      // Initialize DB & Storage client (always uses service_role key to bypass RLS for DB & storage uploads)
+      supabaseRef.current = createClient(SUPABASE_URL, DEFAULT_SERVICE_ROLE_KEY, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
           detectSessionInUrl: false
         }
       });
-      // Initialize Auth client (used exclusively for login/session state)
-      authClientRef.current = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_WRITE_KEY, {
+      // Initialize Auth client (used exclusively for user login/session state)
+      authClientRef.current = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
